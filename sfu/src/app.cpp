@@ -190,11 +190,12 @@ int main(int argc, const char * argv[])
     
     //MSEngine->init("/Users/jackie.ou/Desktop/Research/dev/mediasoup-server/install/conf/config.json");
     
-    if (!cmdArgs.hasArgument("--conf")) {
-        SRV_LOGE("configuration file must be provided.\neg: ./sfu --conf path/config.json");
-        return -1;
-    }
-    std::string configFile = cmdArgs.getNamedArgumentValue("--conf", "");
+    // if (!cmdArgs.hasArgument("--conf")) {
+    //     SRV_LOGE("configuration file must be provided.\neg: ./sfu --conf path/config.json");
+    //     return -1;
+    // }
+    // std::string configFile = cmdArgs.getNamedArgumentValue("--conf", "");
+    std::string configFile = "./config.json";
     
     MSEngine->init(configFile);
     

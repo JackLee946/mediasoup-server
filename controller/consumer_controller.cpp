@@ -286,7 +286,16 @@ ConsumerController::ConsumerController(const ConsumerInternal& internal,
         
         auto response = message->data_as_Response();
         
+        if (!response) {
+            SRV_LOGE("setPreferredLayers: invalid response");
+            return;
+        }
+
         auto setPreferredLayersResponse = response->body_as_Consumer_SetPreferredLayersResponse();
+        if (!setPreferredLayersResponse) {
+            SRV_LOGE("setPreferredLayers: invalid response body");
+            return;
+        }        
         auto preferredLayers = parseConsumerLayers(setPreferredLayersResponse->preferredLayers());
         if (preferredLayers) {
             _preferredLayers.spatialLayer = preferredLayers->spatialLayer;
@@ -295,6 +304,7 @@ ConsumerController::ConsumerController(const ConsumerInternal& internal,
         else {
             _preferredLayers.spatialLayer = 0;
             _preferredLayers.temporalLayer = 0;
+            SRV_LOGE("setPreferredLayers: failed to parse preferred layers");          
         }
     }
 
@@ -684,6 +694,11 @@ namespace srv {
 
     std::shared_ptr<ConsumerLayers> parseConsumerLayers(const FBS::Consumer::ConsumerLayers* data)
     {
+        if (!data) {
+            SRV_LOGE("parseConsumerLayers: data is null");
+            return nullptr; // 或者返回默认值
+        }   
+             
         auto layers = std::make_shared<ConsumerLayers>();
         
         layers->spatialLayer = data->spatialLayer();
