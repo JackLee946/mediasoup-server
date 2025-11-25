@@ -656,7 +656,7 @@ namespace srv {
           bool matched = false;
           for (auto &supportedCodec : clonedSupportedRtpCapabilities.codecs) {
               nlohmann::json jsupportedCodec = supportedCodec;
-              matched = matchCodecs(jmediaCodec, jsupportedCodec,/*strict*/ false, /*modify*/ false);
+              matched = matchCodecs(jmediaCodec, jsupportedCodec,/*strict*/ false, /*modify*/ true);
               if (matched == true) {
                   matchedSupportedCodec = supportedCodec;
                   break;
@@ -957,7 +957,7 @@ namespace srv {
             for (auto &capCodec : caps.codecs) {
                 nlohmann::json jcapCodec = capCodec;
                 nlohmann::json jcodec = codec;
-                matched = matchCodecs(jcodec, jcapCodec, /*strict*/ true, /*modify*/ true);
+                matched = matchCodecs(jcodec, jcapCodec, /*strict*/ false, /*modify*/ true);
                 if (matched == true) {
                     matchedCapCodec = capCodec;
                     break;
@@ -1201,7 +1201,7 @@ namespace srv {
             for (auto &capCodec : caps.codecs) {
                 nlohmann::json jcapCodec = capCodec;
                 nlohmann::json jcodec = codec;
-                matched = matchCodecs(jcapCodec, jcodec, /*strict*/ true, /*modify*/ false);
+                matched = matchCodecs(jcapCodec, jcodec, /*strict*/ false, /*modify*/ true);
                 if (matched == true) {
                     matchedCapCodec = capCodec;
                     break;
@@ -1247,7 +1247,7 @@ namespace srv {
             for (const auto& capCodec : remoteRtpCapabilities.codecs) {
                 nlohmann::json jcapCodec = capCodec;
                 nlohmann::json jcodec = codec;
-                matched = matchCodecs(jcapCodec, jcodec,/*strict*/ true, /*modify*/ false);
+                matched = matchCodecs(jcapCodec, jcodec,/*strict*/ false, /*modify*/ true);
                 if (matched == true) {
                     matchedCapCodec = capCodec;
                     break;

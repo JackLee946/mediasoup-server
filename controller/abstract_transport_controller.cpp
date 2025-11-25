@@ -301,7 +301,13 @@ namespace srv {
         nlohmann::json parameters = options->rtpParameters;
         
         // This may throw.
-        ortc::validateRtpParameters(parameters);
+        try {
+            ortc::validateRtpParameters(parameters);
+        } catch (const std::exception& e) {
+            SRV_LOGE("RTP parameters validation failed: %s", e.what());
+            // 返回错误响应而不是直接抛出异常
+            return nullptr;
+        }
         
         // TODO: check
         options->rtpParameters = parameters;
