@@ -76,6 +76,9 @@ public:
     std::threadsafe_unordered_map<std::string, std::shared_ptr<srv::IDataProducerController>> dataProducerControllers;
     std::threadsafe_unordered_map<std::string, std::shared_ptr<srv::IDataConsumerController>> dataConsumerControllers;
     std::threadsafe_unordered_map<std::string, std::shared_ptr<VideoProducerQualityController>> videoProducerQualityControllers;
+    
+    // Track the last r0 score for each producer to detect recovery
+    std::unordered_map<std::string, uint8_t> lastR0Scores;
 };
 
 class Peer : public oatpp::websocket::AsyncWebSocket::Listener, public std::enable_shared_from_this<Peer>

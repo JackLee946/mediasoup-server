@@ -1000,7 +1000,7 @@ void Room::onHandleDefaultProduce(const std::shared_ptr<Peer>& peer, const nlohm
     
     peer->data()->producerControllers.emplace(std::make_pair(producerController->id(), producerController));
     
-    producerController->scoreSignal.connect([wpeer = std::weak_ptr<Peer>(peer), id = producerController->id()](const std::vector<srv::ProducerScore>& scores){
+    producerController->scoreSignal.connect([wroom = std::weak_ptr<Room>(shared_from_this()), wpeer = std::weak_ptr<Peer>(peer), id = producerController->id()](const std::vector<srv::ProducerScore>& scores){
         auto peer = wpeer.lock();
         if (!peer) {
             return;
@@ -1009,6 +1009,50 @@ void Room::onHandleDefaultProduce(const std::shared_ptr<Peer>& peer, const nlohm
         msg["producerId"] = id;
         msg["scores"] = scores;
         peer->notify("producerScore", msg);
+        
+        // Check if r0 score recovered from 0
+        auto room = wroom.lock();
+        if (room) {
+            uint8_t currentR0Score = 0;
+            bool hasR0 = false;
+            for (const auto& score : scores) {
+                if (score.rid == "r0") {
+                    currentR0Score = score.score;
+                    hasR0 = true;
+                    break;
+                }
+            }
+            
+            if (hasR0) {
+                auto peerData = peer->data();
+                uint8_t lastR0Score = 0;
+                if (peerData->lastR0Scores.find(id) != peerData->lastR0Scores.end()) {
+                    lastR0Score = peerData->lastR0Scores[id];
+                }
+                
+                // If r0 score recovered from 0 to non-zero, send recovery request
+                if (lastR0Score == 0 && currentR0Score > 0) {
+                    // Check if there's a quality controller for this producer
+                    if (peerData->videoProducerQualityControllers.contains(id)) {
+                        auto qualityController = peerData->videoProducerQualityControllers[id];
+                        auto maxQ = qualityController->getMaxDesiredQ();
+                        auto paused = qualityController->isAllConsumerPaused();
+                        
+                        nlohmann::json recoveryMsg;
+                        recoveryMsg["producerId"] = id;
+                        recoveryMsg["paused"] = paused;
+                        recoveryMsg["desiredQ"] = maxQ;
+                        peer->request("videoProducerQualityChanged", recoveryMsg);
+                        
+                        SRV_LOGD("r0 score recovered from 0 to %d for producer %s, sending recovery request (desiredQ=%d)", 
+                                 currentR0Score, id.c_str(), maxQ);
+                    }
+                }
+                
+                // Update last r0 score
+                peerData->lastR0Scores[id] = currentR0Score;
+            }
+        }
     });
 
     producerController->videoOrientationChangeSignal.connect([id = producerController->id()](const srv::ProducerVideoOrientation& videoOrientation){
@@ -1099,7 +1143,7 @@ void Room::onHandleSharingProduce(const std::shared_ptr<Peer>& peer, const nlohm
         _videoSharingController->attach(peer, producerController);
     }
     
-    producerController->scoreSignal.connect([wpeer = std::weak_ptr<Peer>(peer), id = producerController->id()](const std::vector<srv::ProducerScore>& scores){
+    producerController->scoreSignal.connect([wroom = std::weak_ptr<Room>(shared_from_this()), wpeer = std::weak_ptr<Peer>(peer), id = producerController->id()](const std::vector<srv::ProducerScore>& scores){
         auto peer = wpeer.lock();
         if (!peer) {
             return;
@@ -1108,6 +1152,50 @@ void Room::onHandleSharingProduce(const std::shared_ptr<Peer>& peer, const nlohm
         msg["producerId"] = id;
         msg["scores"] = scores;
         peer->notify("producerScore", msg);
+        
+        // Check if r0 score recovered from 0
+        auto room = wroom.lock();
+        if (room) {
+            uint8_t currentR0Score = 0;
+            bool hasR0 = false;
+            for (const auto& score : scores) {
+                if (score.rid == "r0") {
+                    currentR0Score = score.score;
+                    hasR0 = true;
+                    break;
+                }
+            }
+            
+            if (hasR0) {
+                auto peerData = peer->data();
+                uint8_t lastR0Score = 0;
+                if (peerData->lastR0Scores.find(id) != peerData->lastR0Scores.end()) {
+                    lastR0Score = peerData->lastR0Scores[id];
+                }
+                
+                // If r0 score recovered from 0 to non-zero, send recovery request
+                if (lastR0Score == 0 && currentR0Score > 0) {
+                    // Check if there's a quality controller for this producer
+                    if (peerData->videoProducerQualityControllers.contains(id)) {
+                        auto qualityController = peerData->videoProducerQualityControllers[id];
+                        auto maxQ = qualityController->getMaxDesiredQ();
+                        auto paused = qualityController->isAllConsumerPaused();
+                        
+                        nlohmann::json recoveryMsg;
+                        recoveryMsg["producerId"] = id;
+                        recoveryMsg["paused"] = paused;
+                        recoveryMsg["desiredQ"] = maxQ;
+                        peer->request("videoProducerQualityChanged", recoveryMsg);
+                        
+                        SRV_LOGD("r0 score recovered from 0 to %d for producer %s, sending recovery request (desiredQ=%d)", 
+                                 currentR0Score, id.c_str(), maxQ);
+                    }
+                }
+                
+                // Update last r0 score
+                peerData->lastR0Scores[id] = currentR0Score;
+            }
+        }
     });
 
     producerController->videoOrientationChangeSignal.connect([id = producerController->id()](const srv::ProducerVideoOrientation& videoOrientation){
