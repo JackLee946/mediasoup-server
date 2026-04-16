@@ -52,6 +52,7 @@ vc2019/
 build_all.log
 deps/openssl/ninja_out.txt
 deps/openssl/ninja_err.txt
+deps/openssl/build_win_x64/
 
 # Claude session files
 .claude/
