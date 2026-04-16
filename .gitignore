@@ -44,3 +44,14 @@ subprojects
 !subprojects/*.wrap
 
 **/.DS_Store
+
+# Windows VS2019 build output
+vc2019/
+
+# Build logs
+build_all.log
+deps/openssl/ninja_out.txt
+deps/openssl/ninja_err.txt
+
+# Claude session files
+.claude/

@@ -7,8 +7,10 @@
 * @CreateTime: 2023-11-1
 *************************************************************************/
 
+#ifndef _WIN32
 #include <sys/unistd.h>
 #include <sys/wait.h>
+#endif
 #include <iostream>
 #include <atomic>
 #include "engine.h"
@@ -20,6 +22,7 @@
 #include "oatpp/network/Server.hpp"
 #include "oatpp/web/server/HttpRouter.hpp"
 
+#ifndef _WIN32
 int32_t writePidFile(const std::string& pidFile)
 {
     // -rw-r--r--
@@ -80,6 +83,7 @@ int32_t writePidFile(const std::string& pidFile)
 
     return 0;
 }
+#endif // !_WIN32
 
 void run(const oatpp::base::CommandLineArguments& cmdArgs)
 {
@@ -151,14 +155,15 @@ int main(int argc, const char * argv[])
         runAsDeamon = true;
     }
     
+#ifndef _WIN32
     if (runAsDeamon) {
         int32_t pid = fork();
-        
+
         if(pid < 0) {
             SRV_LOGE("fork father process");
             return -1;
         }
-        
+
         // grandpa
         if(pid > 0) {
             int status = 0;
@@ -166,25 +171,31 @@ int main(int argc, const char * argv[])
             SRV_LOGD("grandpa process exit.");
             exit(0);
         }
-        
+
         // father
         pid = fork();
-        
+
         if(pid < 0) {
             SRV_LOGE("fork child process");
             return -1;
         }
-        
+
         if(pid > 0) {
             SRV_LOGD("father process exit");
             exit(0);
         }
-        
+
         // son
         SRV_LOGD("son(daemon) process running.");
-        
+
         writePidFile("/usr/local/sfu/bin/sfu.pid");
     }
+#else
+    // Daemon mode not supported on Windows; --deamon flag is ignored
+    if (runAsDeamon) {
+        SRV_LOGE("daemon mode is not supported on Windows, ignoring --deamon flag");
+    }
+#endif // !_WIN32
     
     //MSEngine->init("/home/ubuntu/dev/mediasoup-server/install/conf/config.json");
     

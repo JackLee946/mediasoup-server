@@ -12,7 +12,9 @@
 #include <thread>
 #include <chrono>
 #include <iostream>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include "srv_logger.h"
 #include "lib.hpp"
 #include "channel.h"
@@ -25,6 +27,7 @@
 
 using namespace std::chrono_literals;
 
+#ifndef _WIN32
 namespace
 {
     static int createPipe(int* fds)
@@ -44,6 +47,7 @@ namespace
         return 0;
     }
 }
+#endif // !_WIN32
 
 namespace srv {
 
@@ -55,6 +59,7 @@ namespace srv {
     WorkerController::WorkerController(const std::shared_ptr<WorkerSettings>& settings)
     : _settings(settings)
     {
+#ifndef _WIN32
         if (MSConfig->params()->mediasoup.multiprocess) {
             createPipe(_consumerChannelFd);
             createPipe(_producerChannelFd);
@@ -63,6 +68,13 @@ namespace srv {
         else {
             _channel = std::make_shared<Channel>();
         }
+#else
+        // On Windows, multiprocess mode is not supported; always use in-process channel
+        if (MSConfig->params()->mediasoup.multiprocess) {
+            SRV_LOGE("multiprocess mode is not supported on Windows, falling back to in-process mode");
+        }
+        _channel = std::make_shared<Channel>();
+#endif // !_WIN32
     }
 
     WorkerController::~WorkerController()
@@ -142,7 +154,8 @@ namespace srv {
     void WorkerController::runWorker()
     {
         auto args = getArgs(_settings);
-        
+
+#ifndef _WIN32
         if (MSConfig->params()->mediasoup.multiprocess) {
             // ediasoup_worker_run(argc,
             //                     &argv[0],
@@ -237,18 +250,19 @@ namespace srv {
             SRV_LOGD("launched mediasoup worker with PID %d\n", _process.pid);
             
             //uv_unref((uv_handle_t*)&_process);
-            
+
             _loop.asyncRun();
-            
+
         }
         else {
+#endif // !_WIN32
             int argc = static_cast<int>(args.size());
             std::vector<char*> argv(argc);
-            
+
             for (size_t i = 0; i < args.size(); ++i) {
                 argv[i] = const_cast<char*>(args[i].c_str());
             }
-            
+
             mediasoup_worker_run(argc,
                                  &argv[0],
                                  MEDIASOUP_VERSION.c_str(),
@@ -260,7 +274,9 @@ namespace srv {
                                  (void*)_channel.get()
                                  );
             close();
+#ifndef _WIN32
         }
+#endif // !_WIN32
     }
 
     bool WorkerController::closed()

@@ -8,12 +8,14 @@ message(STATUS "PROJECT_INCLUDE_DIR : " ${PROJECT_INCLUDE_DIR})
 message(STATUS "PROJECT_LIB_DIR : " ${PROJECT_LIB_DIR})
 
 # C++ standard requirements.
-set(CMAKE_CXX_STANDAR 17)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if (NOT WIN32)
+if (MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /Zc:__cplusplus")
+elseif (NOT WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
-ENDif ()
+endif ()
 
 IF (WIN32)
 
@@ -105,7 +107,29 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/../deps/stl
 )
 
-if (APPLE) 
+if (WIN32)
+target_link_libraries(${PROJECT_NAME}
+    webrtc
+    worker
+    controller
+    oatpp-websocket
+    oatpp
+    uv_a
+    srtp2
+    usrsctp
+    getopt
+    absl::strings
+    absl::optional
+    absl::flat_hash_map
+    absl::hash
+    ${CMAKE_CURRENT_SOURCE_DIR}/../deps/openssl/build_win_x64/libssl.a
+    ${CMAKE_CURRENT_SOURCE_DIR}/../deps/openssl/build_win_x64/libcrypto.a
+    ws2_32
+    crypt32
+    iphlpapi
+    userenv
+)
+elseif (APPLE)
 target_link_libraries(${PROJECT_NAME}
     libwebrtc.a
     libworker.a

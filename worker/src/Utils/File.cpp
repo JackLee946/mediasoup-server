@@ -40,7 +40,11 @@ namespace Utils
 		}
 
 		// Ensure it is readable.
+#ifdef _WIN32
+		err = _access(file, 4); // 4 = R_OK on Windows
+#else
 		err = access(file, R_OK);
+#endif
 
 		if (err != 0)
 		{
