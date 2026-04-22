@@ -45,6 +45,7 @@ subprojects
 
 **/.DS_Store
 
+<<<<<<< HEAD
 # Windows VS2019 build output
 vc2019/
 
@@ -56,3 +57,7 @@ deps/openssl/build_win_x64/
 
 # Claude session files
 .claude/
+=======
+# Ignore OpenSSL
+deps/openssl/
+>>>>>>> f6426096 (feat: detect r0 score recovery and sync video quality)
