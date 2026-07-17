@@ -12,7 +12,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if (MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /Zc:__cplusplus")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /Zc:__cplusplus /utf-8")
 elseif (NOT WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 endif ()
@@ -52,6 +52,14 @@ set(sources
     src/dto/dtos.hpp
     src/dto/config.hpp
 )
+
+# On Windows, link OpenSSL's applink.c to bridge MSVCRT between the
+# application and libssl/libcrypto DLLs. Without this, calls from
+# libssl/libcrypto into stdio/IO helpers fail with
+# "OPENSSL_Uplink: no OPENSSL_Applink".
+if (WIN32)
+    list(APPEND sources ${CMAKE_CURRENT_SOURCE_DIR}/../deps/openssl/ms/applink.c)
+endif()
 
 add_executable(${PROJECT_NAME} ${sources} )
 
@@ -122,8 +130,7 @@ target_link_libraries(${PROJECT_NAME}
     absl::optional
     absl::flat_hash_map
     absl::hash
-    ${CMAKE_CURRENT_SOURCE_DIR}/../deps/openssl/build_win_x64/libssl.a
-    ${CMAKE_CURRENT_SOURCE_DIR}/../deps/openssl/build_win_x64/libcrypto.a
+    ${PROJECT_OPENSSL_LIBS}
     ws2_32
     crypt32
     iphlpapi

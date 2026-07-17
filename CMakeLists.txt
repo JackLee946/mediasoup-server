@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+﻿cmake_minimum_required(VERSION 3.5)
 
 # Detect CPU architecture (cross-platform, no dpkg required)
 IF(WIN32)
@@ -59,9 +59,9 @@ message(STATUS "CMAKE_CXX_COMPILER:${CMAKE_CXX_COMPILER}")
 set(PROJECT_NAME "mediasoup-server")
 project(${PROJECT_NAME})
 
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
 
 set(PROJECT_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/release/include 
 ${CMAKE_CURRENT_SOURCE_DIR}/release/include/oatpp-1.4.0/oatpp
@@ -102,13 +102,54 @@ IF (WIN32)
   # moodycamel concurrentqueue (included as moodycamel/concurrentqueue.h)
   set(PROJECT_INCLUDE_DIR ${PROJECT_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/deps)
   set(PROJECT_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/win/${CPU_TYPE})
+
+  if(NOT DEFINED OPENSSL_ROOT_DIR OR OPENSSL_ROOT_DIR STREQUAL "")
+    if(DEFINED ENV{OPENSSL_ROOT_DIR})
+      set(OPENSSL_ROOT_DIR "$ENV{OPENSSL_ROOT_DIR}" CACHE PATH "OpenSSL root directory" FORCE)
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/deps/openssl/build_win_x64/install")
+      set(OPENSSL_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/openssl/build_win_x64/install" CACHE PATH "OpenSSL root directory" FORCE)
+    elseif(EXISTS "C:/Program Files/OpenSSL-Win64")
+      set(OPENSSL_ROOT_DIR "C:/Program Files/OpenSSL-Win64" CACHE PATH "OpenSSL root directory" FORCE)
+    endif()
+  endif()
+
+  find_library(PROJECT_OPENSSL_SSL_LIBRARY
+    NAMES libssl ssl
+    PATHS
+      "${OPENSSL_ROOT_DIR}/lib"
+      "${OPENSSL_ROOT_DIR}/lib/VC/x64/MD"
+      "${OPENSSL_ROOT_DIR}/lib/VC/x64/MT"
+      "${OPENSSL_ROOT_DIR}"
+    NO_DEFAULT_PATH
+  )
+  find_library(PROJECT_OPENSSL_CRYPTO_LIBRARY
+    NAMES libcrypto crypto
+    PATHS
+      "${OPENSSL_ROOT_DIR}/lib"
+      "${OPENSSL_ROOT_DIR}/lib/VC/x64/MD"
+      "${OPENSSL_ROOT_DIR}/lib/VC/x64/MT"
+      "${OPENSSL_ROOT_DIR}"
+    NO_DEFAULT_PATH
+  )
+  if(PROJECT_OPENSSL_SSL_LIBRARY AND PROJECT_OPENSSL_CRYPTO_LIBRARY)
+    set(PROJECT_OPENSSL_LIBS ${PROJECT_OPENSSL_SSL_LIBRARY} ${PROJECT_OPENSSL_CRYPTO_LIBRARY})
+    set(PROJECT_INCLUDE_DIR ${PROJECT_INCLUDE_DIR} "${OPENSSL_ROOT_DIR}/include")
+    message(STATUS "Windows OpenSSL libraries: ${PROJECT_OPENSSL_LIBS}")
+  else()
+    message(WARNING "MSVC OpenSSL .lib files were not found. Run build_openssl_win.bat or set OPENSSL_ROOT_DIR to a Win64 OpenSSL install before building sfu.")
+    set(PROJECT_OPENSSL_LIBS
+      "${OPENSSL_ROOT_DIR}/lib/libssl.lib"
+      "${OPENSSL_ROOT_DIR}/lib/libcrypto.lib"
+    )
+  endif()
 ENDIF ()
 
 IF(MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /Zc:__cplusplus")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /Zc:__cplusplus /utf-8 /FS")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /FS")
     # Suppress common MSVC warnings for third-party code
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_WINSOCK_DEPRECATED_NO_WARNINGS)
-    add_definitions(-DNOMINMAX -DWIN32_LEAN_AND_MEAN)
+    add_definitions(-DNOMINMAX -DWIN32_LEAN_AND_MEAN -D_WIN32_WINNT=0x0602)
 ELSEIF(NOT WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 ENDIF()
@@ -132,10 +173,10 @@ IF(WIN32)
   set(OPENSSL_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps/openssl/include
       ${CMAKE_CURRENT_SOURCE_DIR}/deps/openssl/generated-config/archs/VC-WIN64A/no-asm/include
       CACHE PATH "" FORCE)
-  set(TEST_APPS OFF CACHE INTERNAL "")
+  set(LIBSRTP_TEST_APPS OFF CACHE INTERNAL "")
   set(ENABLE_OPENSSL OFF CACHE INTERNAL "")
   add_subdirectory(deps/libsrtp)
-  unset(TEST_APPS)
+  unset(LIBSRTP_TEST_APPS)
   unset(ENABLE_OPENSSL)
 
   # usrsctp

@@ -7,7 +7,7 @@ include (TestBigEndian)
 TEST_BIG_ENDIAN(IS_BIG_ENDIAN)
 
 IF(MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /Zc:__cplusplus")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /Zc:__cplusplus /utf-8")
 ELSEIF(NOT WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 ENDIF()

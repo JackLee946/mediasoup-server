@@ -36,3 +36,21 @@ Mediasoup based SFU:
     3) sudo service sfu start|stop|restart|status
     
     4) sudo ./unstall.sh
+
+3.Windows (VS2019 x64)
+
+  a.Install Visual Studio 2019 with the C++ desktop workload, CMake, and Perl.
+
+  b.Run from a VS2019 x64 Developer Command Prompt:
+
+    build_openssl_win.bat
+
+  c.Generate the VS2019 solution:
+
+    genvs2019.bat
+
+  d.Open vc2019\mediasoup-server.sln or build from the command line:
+
+    cmake --build vc2019 --config Debug --target sfu
+
+  If OpenSSL is installed elsewhere, set OPENSSL_ROOT_DIR before running genvs2019.bat.

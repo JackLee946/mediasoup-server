@@ -696,9 +696,9 @@ namespace srv {
     {
         if (!data) {
             SRV_LOGE("parseConsumerLayers: data is null");
-            return nullptr; // 或者返回默认值
-        }   
-             
+            return nullptr;
+        }
+
         auto layers = std::make_shared<ConsumerLayers>();
         
         layers->spatialLayer = data->spatialLayer();
