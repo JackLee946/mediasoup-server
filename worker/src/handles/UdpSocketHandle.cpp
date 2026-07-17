@@ -1,4 +1,4 @@
-﻿#define MS_CLASS "UdpSocketHandle"
+#define MS_CLASS "UdpSocketHandle"
 // #define MS_LOG_DEV_LEVEL 3
 
 #include "handles/UdpSocketHandle.hpp"
@@ -21,7 +21,6 @@ thread_local static uint8_t ReadBuffer[ReadBufferSize];
 
 inline static void onAlloc(uv_handle_t* handle, size_t suggestedSize, uv_buf_t* buf)
 {
-	fprintf(stderr, "DEBUG_ONALLOC_FIRED\n"); fflush(stderr);
 	auto* socket = static_cast<UdpSocketHandle*>(handle->data);
 
 	if (socket)
@@ -33,7 +32,6 @@ inline static void onAlloc(uv_handle_t* handle, size_t suggestedSize, uv_buf_t* 
 inline static void onRecv(
   uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf, const struct sockaddr* addr, unsigned int flags)
 {
-	fprintf(stderr, "DEBUG_ONRECV_FIRED nread=%zd\n", nread); fflush(stderr);
 	auto* socket = static_cast<UdpSocketHandle*>(handle->data);
 
 	if (socket)
