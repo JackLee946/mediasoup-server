@@ -15,9 +15,7 @@
 #include "dto/config.hpp"
 #include "utils/statistics.hpp"
 #include "oatpp/Environment.hpp"
-#ifndef _WIN32
 #include "oatpp-openssl/server/ConnectionProvider.hpp"
-#endif
 #include "oatpp/web/server/interceptor/RequestInterceptor.hpp"
 #include "oatpp/web/server/AsyncHttpConnectionHandler.hpp"
 #include "oatpp/web/server/HttpRouter.hpp"
@@ -125,8 +123,7 @@ public:
 
         std::shared_ptr<oatpp::network::ServerConnectionProvider> result;
 
-        // TODO: use valid cert
-#ifndef _WIN32
+        // A方案: Windows 上启用 TLS 支持
         if (appConfig->useTLS) {
             OATPP_LOGd("oatpp::openssl::Config", "key_path='%s'", appConfig->tlsPrivateKeyPath->c_str());
             OATPP_LOGd("oatpp::openssl::Config", "chn_path='%s'", appConfig->tlsCertificateChainPath->c_str());
@@ -137,10 +134,6 @@ public:
         } else {
             result = oatpp::network::tcp::server::ConnectionProvider::createShared({"0.0.0.0", appConfig->port, oatpp::network::Address::IP_4});
         }
-#else
-        // TLS not supported on Windows debug builds (oatpp-openssl requires pre-built OpenSSL)
-        result = oatpp::network::tcp::server::ConnectionProvider::createShared({"0.0.0.0", appConfig->port, oatpp::network::Address::IP_4});
-#endif
 
         return result;
     }());

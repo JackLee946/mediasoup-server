@@ -202,8 +202,8 @@ IF(WIN32)
   set(OATPP_DIR_SRC "${CMAKE_CURRENT_SOURCE_DIR}/deps/oatpp/src" CACHE PATH "" FORCE)
   set(OATPP_BUILD_TESTS OFF CACHE INTERNAL "")
   add_subdirectory(deps/oatpp-websocket)
-  # oatpp-openssl requires pre-built OpenSSL; skip for Windows debug builds
-  # add_subdirectory(deps/oatpp-openssl)
+  # A方案: 在 Windows 上启用 oatpp-openssl 以支持 TLS (HTTPS)
+  add_subdirectory(deps/oatpp-openssl)
   unset(OATPP_MODULES_LOCATION)
   unset(OATPP_DIR_SRC)
 

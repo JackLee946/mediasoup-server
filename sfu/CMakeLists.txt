@@ -122,6 +122,7 @@ target_link_libraries(${PROJECT_NAME}
     controller
     oatpp-websocket
     oatpp
+    oatpp-openssl
     uv_a
     srtp2
     usrsctp
