@@ -13,10 +13,14 @@
 #endif
 #include <iostream>
 #include <atomic>
+#include <string>
+#include <cctype>
+#include <cstdlib>
 #include "engine.h"
 #include "config.h"
 #include "controller/statistics_controller.hpp"
 #include "controller/rooms_controller.hpp"
+#include "srv_logger.h"
 #include "app_component.hpp"
 #include "oatpp/Environment.hpp"
 #include "oatpp/network/Server.hpp"
@@ -207,16 +211,59 @@ int main(int argc, const char * argv[])
     // }
     // std::string configFile = cmdArgs.getNamedArgumentValue("--conf", "");
     std::string configFile = "./config.json";
-    
+
+    // Initialize file logger as early as possible so subsequent SRV_LOGx calls
+    // are captured. Defaults: ./sfu.log, INFO level, 50 MB rotation, 3 backups.
+    // Override with env vars: SRV_LOG_FILE, SRV_LOG_LEVEL, SRV_LOG_MAX_BYTES,
+    // SRV_LOG_BACKUPS.
+    {
+        const char* envPath = std::getenv("SRV_LOG_FILE");
+        const char* envLevel = std::getenv("SRV_LOG_LEVEL");
+        const char* envMaxBytes = std::getenv("SRV_LOG_MAX_BYTES");
+        const char* envBackups = std::getenv("SRV_LOG_BACKUPS");
+
+        std::string logPath = envPath ? envPath : "sfu.log";
+
+        srv::SrvLogLevel logLevel = srv::SrvLogLevel::INFO;
+        if (envLevel) {
+            std::string lv = envLevel;
+            for (auto& c : lv) { c = static_cast<char>(::tolower(c)); }
+            if (lv == "debug") logLevel = srv::SrvLogLevel::DEBUG;
+            else if (lv == "info")  logLevel = srv::SrvLogLevel::INFO;
+            else if (lv == "warn" || lv == "warning") logLevel = srv::SrvLogLevel::WARN;
+            else if (lv == "error" || lv == "err") logLevel = srv::SrvLogLevel::ERR;
+            else if (lv == "none" || lv == "off") logLevel = srv::SrvLogLevel::NONE;
+        }
+
+        std::size_t maxBytes = 50ull * 1024 * 1024;
+        if (envMaxBytes) {
+            try { maxBytes = static_cast<std::size_t>(std::stoull(envMaxBytes)); }
+            catch (...) { /* keep default */ }
+        }
+
+        int backups = 3;
+        if (envBackups) {
+            try { backups = std::stoi(envBackups); }
+            catch (...) { /* keep default */ }
+        }
+
+        if (!srv::srv_logger_init(logPath.c_str(), logLevel, maxBytes, backups)) {
+            std::fprintf(stderr, "warning: failed to initialize file logger at %s, "
+                                  "continuing with stderr only\n", logPath.c_str());
+        }
+    }
+
     MSEngine->init(configFile);
-    
+
     oatpp::Environment::init();
 
     run(cmdArgs);
-    
+
     MSEngine->destroy();
 
     oatpp::Environment::destroy();
+
+    srv::srv_logger_close();
 
     return 0;
 }

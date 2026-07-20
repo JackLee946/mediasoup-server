@@ -11,7 +11,9 @@ cd /d %CURRENT_DIR%%PROJECT_NAME%
 
 rem Set OpenSSL path. Override OPENSSL_ROOT_DIR if OpenSSL is installed elsewhere.
 if "%OPENSSL_ROOT_DIR%"=="" (
-    if exist "%CURRENT_DIR%deps\openssl\build_win_x64\install\lib\libssl.lib" (
+    if exist "%CURRENT_DIR%release\lib\libcrypto.a" (
+        set OPENSSL_ROOT_DIR=%CURRENT_DIR%release
+    ) else if exist "%CURRENT_DIR%deps\openssl\build_win_x64\install\lib\libssl.lib" (
         set OPENSSL_ROOT_DIR=%CURRENT_DIR%deps\openssl\build_win_x64\install
     ) else (
         set OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL-Win64

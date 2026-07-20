@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.5)
 
 # Detect CPU architecture (cross-platform, no dpkg required)
 IF(WIN32)
@@ -106,16 +106,17 @@ IF (WIN32)
   if(NOT DEFINED OPENSSL_ROOT_DIR OR OPENSSL_ROOT_DIR STREQUAL "")
     if(DEFINED ENV{OPENSSL_ROOT_DIR})
       set(OPENSSL_ROOT_DIR "$ENV{OPENSSL_ROOT_DIR}" CACHE PATH "OpenSSL root directory" FORCE)
-    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/deps/openssl/build_win_x64/install")
-      set(OPENSSL_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/openssl/build_win_x64/install" CACHE PATH "OpenSSL root directory" FORCE)
     elseif(EXISTS "C:/Program Files/OpenSSL-Win64")
       set(OPENSSL_ROOT_DIR "C:/Program Files/OpenSSL-Win64" CACHE PATH "OpenSSL root directory" FORCE)
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/deps/openssl/build_win_x64/install")
+      set(OPENSSL_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/openssl/build_win_x64/install" CACHE PATH "OpenSSL root directory" FORCE)
     endif()
   endif()
 
   find_library(PROJECT_OPENSSL_SSL_LIBRARY
-    NAMES libssl ssl
+    NAMES libssl64MD libssl ssl
     PATHS
+      "${OPENSSL_ROOT_DIR}/lib/VC"
       "${OPENSSL_ROOT_DIR}/lib"
       "${OPENSSL_ROOT_DIR}/lib/VC/x64/MD"
       "${OPENSSL_ROOT_DIR}/lib/VC/x64/MT"
@@ -123,8 +124,9 @@ IF (WIN32)
     NO_DEFAULT_PATH
   )
   find_library(PROJECT_OPENSSL_CRYPTO_LIBRARY
-    NAMES libcrypto crypto
+    NAMES libcrypto64MD libcrypto crypto
     PATHS
+      "${OPENSSL_ROOT_DIR}/lib/VC"
       "${OPENSSL_ROOT_DIR}/lib"
       "${OPENSSL_ROOT_DIR}/lib/VC/x64/MD"
       "${OPENSSL_ROOT_DIR}/lib/VC/x64/MT"
@@ -169,15 +171,23 @@ IF(WIN32)
   add_subdirectory(deps/getopt)
 
   # libsrtp2 (needs OpenSSL)
-  set(OPENSSL_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps/openssl CACHE PATH "" FORCE)
+  if(EXISTS "C:/Program Files/OpenSSL-Win64")
+    set(OPENSSL_ROOT_DIR "C:/Program Files/OpenSSL-Win64" CACHE PATH "" FORCE)
+  elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/deps/openssl/build_win_x64/install")
+    set(OPENSSL_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/openssl/build_win_x64/install" CACHE PATH "" FORCE)
+  else()
+    set(OPENSSL_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/release CACHE PATH "" FORCE)
+  endif()
   set(OPENSSL_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps/openssl/include
       ${CMAKE_CURRENT_SOURCE_DIR}/deps/openssl/generated-config/archs/VC-WIN64A/no-asm/include
       CACHE PATH "" FORCE)
   set(LIBSRTP_TEST_APPS OFF CACHE INTERNAL "")
-  set(ENABLE_OPENSSL OFF CACHE INTERNAL "")
+  set(ENABLE_OPENSSL ON CACHE INTERNAL "")
+  set(ENABLE_WARNINGS_AS_ERRORS OFF CACHE INTERNAL "")
   add_subdirectory(deps/libsrtp)
   unset(LIBSRTP_TEST_APPS)
   unset(ENABLE_OPENSSL)
+  unset(ENABLE_WARNINGS_AS_ERRORS)
 
   # usrsctp
   set(sctp_werror OFF CACHE INTERNAL "")

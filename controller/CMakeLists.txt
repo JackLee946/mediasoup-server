@@ -100,6 +100,7 @@ set(sources
   data_consumer_controller.cpp
   producer_controller.cpp
   data_producer_controller.cpp
+  srv_logger.cpp
 )
 
 add_library(controller
