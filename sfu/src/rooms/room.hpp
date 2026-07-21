@@ -68,6 +68,8 @@ public:
     void onPeerClose(const std::string& peerId);
     
     void onHandleRequest(const std::shared_ptr<Peer>& peer, const nlohmann::json& request, AcceptFunc& accept, RejectFunc& reject);
+
+    void onHandleRequestImpl(const std::shared_ptr<Peer>& peer, const nlohmann::json& request, AcceptFunc& accept, RejectFunc& reject);
     
     void onHandleNotification(const nlohmann::json& notification) {}
     

@@ -721,9 +721,9 @@ namespace srv {
     std::shared_ptr<IDataConsumerController> AbstractTransportController::consumeData(const std::shared_ptr<DataConsumerOptions>& options)
     {
         SRV_LOGD("consumeData()");
-        
+
         std::shared_ptr<DataConsumerController> dataConsumerController;
-        
+
         const std::string& dataProducerId = options->dataProducerId;
         const bool ordered = options->ordered;
         const int64_t maxPacketLifeTime = options->maxPacketLifeTime;
@@ -731,7 +731,7 @@ namespace srv {
         const bool paused = options->paused;
         const auto& subchannels = options->subchannels;
         const nlohmann::json& appData = options->appData;
-     
+
          if (dataProducerId.empty()) {
              SRV_LOGE("missing producerId");
              return dataConsumerController;
@@ -743,17 +743,17 @@ namespace srv {
              SRV_LOGE("dataProducer with id %s not found", dataProducerId.c_str());
              return dataConsumerController;
          }
-             
+
          std::string type;
          SctpStreamParameters sctpStreamParameters;
          int sctpStreamId = 0;
-        
+
         // If this is not a DirectTransport, use sctpStreamParameters from the
         // DataProducer (if type 'sctp') unless they are given in method parameters.
         std::string constructorName = typeid(*this).name();
         if (constructorName.find("DirectTransport") == std::string::npos) {
             type = "sctp";
-            
+
             sctpStreamParameters = dataProducerController->sctpStreamParameters();
 
             // Override if given.
@@ -763,12 +763,19 @@ namespace srv {
 
             sctpStreamParameters.maxRetransmits = maxRetransmits;
 
-            // This may throw.
+            // This may throw or return -1 if transport is not yet ready
+            // (e.g. SCTP parameters not negotiated). Without this guard we
+            // would pass streamId = -1 to the worker and then dereference it
+            // later as a valid index -> 0xFFFFFFFFFFFFFFFC access violation.
             sctpStreamId = getNextSctpStreamId();
+            if (sctpStreamId < 0) {
+                SRV_LOGE("consumeData() | failed to allocate SCTP stream id (transport not ready?)");
+                return dataConsumerController;
+            }
 
             this->_sctpStreamIds[sctpStreamId] = 1;
             sctpStreamParameters.streamId = sctpStreamId;
-             
+
         }
         // If this is a DirectTransport, sctpStreamParameters must not be used.
         else {
@@ -776,44 +783,82 @@ namespace srv {
 
             SRV_LOGW("consumeData() | ordered, maxPacketLifeTime and maxRetransmits are ignored when consuming data on a DirectTransport");
         }
-        
+
         auto channel = _channel.lock();
         if (!channel) {
             return dataConsumerController;
         }
-        
+
         auto label = dataProducerController->label();
         auto protocol = dataProducerController->protocol();
-        
+
         auto dataConsumerId = uuid::uuidv4();
-        
+
         DataConsumerInternal internal;
         internal.transportId = _internal.transportId;
         internal.dataConsumerId = dataConsumerId;
-        
+
         flatbuffers::FlatBufferBuilder builder;
-            
+
         auto reqOffset = createConsumeDataRequest(builder, dataConsumerId, dataProducerId, type, sctpStreamParameters, label, protocol, paused, subchannels);
 
         auto reqId = channel->genRequestId();
-            
+
         auto reqData = MessageBuilder::createRequest(builder,
                                                      reqId,
                                                      _internal.transportId,
                                                      FBS::Request::Method::TRANSPORT_CONSUME_DATA,
                                                      FBS::Request::Body::Transport_ConsumeDataRequest,
                                                      reqOffset);
-        
+
         auto respData = channel->request(reqId, reqData);
-            
-        auto message = FBS::Message::GetMessage(respData.data());
-        
+
+        if (respData.empty()) {
+            SRV_LOGE("consumeData() | empty response from worker (transportId=%s, dataProducerId=%s)",
+                     _internal.transportId.c_str(), dataProducerId.c_str());
+            // Release the SCTP stream id we reserved above so it can be reused.
+            if (sctpStreamId >= 0 && sctpStreamId < (int)_sctpStreamIds.size()) {
+                _sctpStreamIds[sctpStreamId] = 0;
+            }
+            return dataConsumerController;
+        }
+
+        const auto* message = FBS::Message::GetMessage(respData.data());
+        if (!message) {
+            SRV_LOGE("consumeData() | failed to parse response message");
+            if (sctpStreamId >= 0 && sctpStreamId < (int)_sctpStreamIds.size()) {
+                _sctpStreamIds[sctpStreamId] = 0;
+            }
+            return dataConsumerController;
+        }
+
         auto response = message->data_as_Response();
-        
+        if (!response) {
+            SRV_LOGE("consumeData() | response is not a Response message");
+            if (sctpStreamId >= 0 && sctpStreamId < (int)_sctpStreamIds.size()) {
+                _sctpStreamIds[sctpStreamId] = 0;
+            }
+            return dataConsumerController;
+        }
+
         auto dump = response->body_as_DataConsumer_DumpResponse();
-        
+        if (!dump) {
+            SRV_LOGE("consumeData() | invalid data consumer dump response body");
+            if (sctpStreamId >= 0 && sctpStreamId < (int)_sctpStreamIds.size()) {
+                _sctpStreamIds[sctpStreamId] = 0;
+            }
+            return dataConsumerController;
+        }
+
         auto dataConsumerDump = parseDataConsumerDumpResponse(dump);
-        
+        if (!dataConsumerDump) {
+            SRV_LOGE("consumeData() | parseDataConsumerDumpResponse returned null");
+            if (sctpStreamId >= 0 && sctpStreamId < (int)_sctpStreamIds.size()) {
+                _sctpStreamIds[sctpStreamId] = 0;
+            }
+            return dataConsumerController;
+        }
+
         DataConsumerData dataConsumerData;
         dataConsumerData.dataProducerId = dataConsumerDump->dataProducerId;
         dataConsumerData.type = dataConsumerDump->type;
@@ -821,7 +866,7 @@ namespace srv {
         dataConsumerData.label = dataConsumerDump->label;
         dataConsumerData.protocol = dataConsumerDump->protocol;
         dataConsumerData.bufferedAmountLowThreshold = dataConsumerDump->bufferedAmountLowThreshold;
-        
+
         dataConsumerController = std::make_shared<DataConsumerController>(internal,
                                                                           dataConsumerData,
                                                                           _channel.lock(),
@@ -831,7 +876,7 @@ namespace srv {
                                                                           appData);
         dataConsumerController->init();
         _dataConsumerControllers.emplace(std::make_pair(dataConsumerController->id(), dataConsumerController));
-        
+
         auto removeLambda = [id = dataConsumerController->id(), wself = std::weak_ptr<AbstractTransportController>(shared_from_this()), sctpStreamId]() {
             auto self = wself.lock();
             if (!self) {
@@ -840,14 +885,14 @@ namespace srv {
             if (self->_dataConsumerControllers.contains(id)) {
                 self->_dataConsumerControllers.erase(id);
             }
-            if (self->_sctpStreamIds.size() != 0) {
+            if (sctpStreamId >= 0 && sctpStreamId < (int)self->_sctpStreamIds.size()) {
                 self->_sctpStreamIds[sctpStreamId] = 0;
             }
         };
-        
+
         dataConsumerController->closeSignal.connect(removeLambda);
         dataConsumerController->dataProducerCloseSignal.connect(removeLambda);
-        
+
         this->newDataConsumerSignal(dataConsumerController);
 
         return dataConsumerController;

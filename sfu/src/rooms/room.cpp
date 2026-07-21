@@ -489,7 +489,21 @@ void Room::createDataConsumer(const std::shared_ptr<Peer>& dataConsumerPeer, con
         SRV_LOGE("createDataConsumer() | transport->consumeData(): %s", error);
         return;
     }
-    
+    catch (const std::exception& e) {
+        SRV_LOGE("createDataConsumer() | transport->consumeData() threw: %s", e.what());
+        return;
+    }
+
+    // consumeData() can return null when the transport is not yet ready for
+    // data-channel (SCTP negotiated, stream id available, etc.) or when the
+    // worker returns a malformed response. Without this guard the next line
+    // would dereference a null shared_ptr (-> SEGV on Windows, where the
+    // mediasoup worker runs in-process and pulls the whole SFU down).
+    if (!dataConsumerController) {
+        SRV_LOGW("createDataConsumer() | consumeData returned null (transport not ready?)");
+        return;
+    }
+
     dataConsumerPeer->data()->dataConsumerControllers.emplace(std::make_pair(dataConsumerController->id(), dataConsumerController));
 
     dataConsumerController->transportCloseSignal.connect([id = dataConsumerController->id(), wdcp = std::weak_ptr<Peer>(dataConsumerPeer)](){
@@ -579,7 +593,42 @@ void Room::onHandleRequest(const std::shared_ptr<Peer>& peer, const nlohmann::js
     if (!peer) {
         return;
     }
-    
+
+    // Top-level guard: any handler that does request["data"]["foo"] can throw
+    // nlohmann::json::type_error if the payload is missing a key. On Windows
+    // the mediasoup worker runs in-process, so an uncaught throw here tears
+    // down the entire SFU. Catch, log, and reply with a 500 instead.
+    try {
+        onHandleRequestImpl(peer, request, accept, reject);
+    }
+    catch (const nlohmann::json::exception& e) {
+        std::string method;
+        if (request.is_object() && request.contains("method") && request["method"].is_string()) {
+            method = request["method"].get<std::string>();
+        }
+        SRV_LOGE("Room::onHandleRequest() | json exception in handler [method=%s, peerId=%s]: %s",
+                 method.c_str(), peer->id().c_str(), e.what());
+        try {
+            reject(request, 500, std::string("server json error: ") + e.what());
+        } catch (...) { /* ignore: reply failure must not crash */ }
+    }
+    catch (const std::exception& e) {
+        SRV_LOGE("Room::onHandleRequest() | std::exception in handler [peerId=%s]: %s",
+                 peer->id().c_str(), e.what());
+        try {
+            reject(request, 500, std::string("server error: ") + e.what());
+        } catch (...) { /* ignore */ }
+    }
+    catch (...) {
+        SRV_LOGE("Room::onHandleRequest() | unknown exception in handler [peerId=%s]", peer->id().c_str());
+        try {
+            reject(request, 500, "server unknown error");
+        } catch (...) { /* ignore */ }
+    }
+}
+
+void Room::onHandleRequestImpl(const std::shared_ptr<Peer>& peer, const nlohmann::json& request, AcceptFunc& accept, RejectFunc& reject)
+{
     std::string method;
     if (request.contains("method")) {
         method = request["method"];
@@ -1515,43 +1564,60 @@ void Room::onHandleProduceData(const std::shared_ptr<Peer>& peer, const nlohmann
     }
     
     assert(method == "produceData");
-    
+
     if (!peer->data()->joined) {
         SRV_LOGE("Peer not yet joined");
         accept(request, {});
         return;
     }
 
-    const auto& data = request["data"];
-    const auto& transportId = data["transportId"];
-    const auto& sctpStreamParameters = data["sctpStreamParameters"];
-    const auto& label = data["label"];
-    const auto& protocol = data["protocol"];
-    const auto& appData = data["appData"];
-    
-    if (!peer->data()->transportControllers.contains(transportId)) {
-        SRV_LOGE("transport with id transportId: %s not found", transportId.dump().c_str());
+    // Use value() with defaults so a malformed client payload (missing or
+    // wrong-typed field) cannot throw nlohmann::json::type_error and crash
+    // the server. On Linux the worker is a separate process so a thrown
+    // exception would only kill this coroutine; on Windows the worker runs
+    // in-process and an uncaught throw here brings down the whole SFU.
+    const auto& data = request.value("data", nlohmann::json::object());
+    const auto transportId    = data.value("transportId", std::string{});
+    const auto sctpStreamParameters = data.value("sctpStreamParameters", nlohmann::json::object());
+    const auto label          = data.value("label", std::string{});
+    const auto protocol       = data.value("protocol", std::string{});
+    const auto appData        = data.value("appData", nlohmann::json::object());
+
+    if (transportId.empty()) {
+        SRV_LOGE("produceData() | missing transportId");
         accept(request, {});
         return;
     }
-    
+
+    if (!peer->data()->transportControllers.contains(transportId)) {
+        SRV_LOGE("transport with id transportId: %s not found", transportId.c_str());
+        accept(request, {});
+        return;
+    }
+
     const auto& transportController = peer->data()->transportControllers[transportId];
-    
+
     auto option = std::make_shared<srv::DataProducerOptions>();
-    option->sctpStreamParameters = sctpStreamParameters,
+    option->sctpStreamParameters = sctpStreamParameters;
     option->label = label;
     option->protocol = protocol;
     option->appData = appData;
-    
+
     auto dataProducerController = transportController->produceData(option);
-    
+    if (!dataProducerController) {
+        SRV_LOGE("produceData() | transport->produceData returned null (transportId=%s)",
+                 transportId.c_str());
+        accept(request, {});
+        return;
+    }
+
     peer->data()->dataProducerControllers.emplace(std::make_pair(dataProducerController->id(), dataProducerController));
-    
+
     nlohmann::json msg;
     msg["id"] = dataProducerController->id();
-    
+
     accept(request, msg);
-    
+
     if (dataProducerController->label() == "chat") {
         auto peers = getJoinedPeers(peer->id());
         
