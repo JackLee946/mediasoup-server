@@ -314,8 +314,18 @@ void Room::createConsumer(const std::shared_ptr<Peer>& consumerPeer, const std::
             options->enableRtx = true;
             options->paused = true;
             consumerController = transportController->consume(options);
+            if (!consumerController) {
+                // consume() can return null when the worker response is empty
+                // or malformed (common on Windows where the worker runs
+                // in-process and a transient worker-side error would otherwise
+                // SEGV the whole server). Skip this consumer instead of
+                // dereferencing the null pointer below.
+                SRV_LOGE("createConsumer() | transport->consume() returned null (producerId=%s)",
+                         producerController->id().c_str());
+                return;
+            }
             consumerController->setAppData(producerController->appData());
-            
+
         }
         catch (const char *error) {
             SRV_LOGE("createConsumer() | transport->consume(): %s", error);

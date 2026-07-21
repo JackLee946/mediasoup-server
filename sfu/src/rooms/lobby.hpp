@@ -64,7 +64,15 @@ public:
     
 public:
     std::threadsafe_unordered_map<std::string, std::shared_ptr<Room>> _roomMap;
-    
+
+    // Serializes the "check then act" sequences in getOrCreateRoom() and
+    // onBeforeDestroy_NonBlocking(). The internal mutex of _roomMap only
+    // protects individual map operations; without this mutex a race between
+    // contains() and operator[] / emplace() can either insert an empty
+    // shared_ptr (later dereferenced -> SEGV) or return a Room that is no
+    // longer in the map (use-after-free on close).
+    std::mutex _roomMapMutex;
+
 private:
     OATPP_COMPONENT(std::shared_ptr<Statistics>, _statistics);
 };

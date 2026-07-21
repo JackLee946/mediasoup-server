@@ -377,13 +377,31 @@ namespace srv {
                                                      reqOffset);
         
         auto respData = channel->request(reqId, reqData);
-            
-        auto message = FBS::Message::GetMessage(respData.data());
-        
+
+        if (respData.empty()) {
+            SRV_LOGE("produce() | empty response from worker (transportId=%s, kind=%s)",
+                     _internal.transportId.c_str(), kind.c_str());
+            return producerController;
+        }
+
+        const auto* message = FBS::Message::GetMessage(respData.data());
+        if (!message) {
+            SRV_LOGE("produce() | failed to parse response message");
+            return producerController;
+        }
+
         auto response = message->data_as_Response();
-        
+        if (!response) {
+            SRV_LOGE("produce() | response is not a Response message");
+            return producerController;
+        }
+
         auto stats = response->body_as_Transport_ProduceResponse();
-        
+        if (!stats) {
+            SRV_LOGE("produce() | invalid produce response body");
+            return producerController;
+        }
+
         ProducerData producerData;
         producerData.type = producerTypeFromFbs(stats->type());
         producerData.kind = kind;
@@ -499,23 +517,49 @@ namespace srv {
                                                      reqOffset);
         
         auto respData = channel->request(reqId, reqData);
-            
-        auto message = FBS::Message::GetMessage(respData.data());
-        
+
+        if (respData.empty()) {
+            SRV_LOGE("consume() | empty response from worker (transportId=%s, producerId=%s)",
+                     _internal.transportId.c_str(), producerId.c_str());
+            return consumerController;
+        }
+
+        const auto* message = FBS::Message::GetMessage(respData.data());
+        if (!message) {
+            SRV_LOGE("consume() | failed to parse response message");
+            return consumerController;
+        }
+
         auto response = message->data_as_Response();
-        
+        if (!response) {
+            SRV_LOGE("consume() | response is not a Response message");
+            return consumerController;
+        }
+
         auto stats = response->body_as_Transport_ConsumeResponse();
-        
+        if (!stats) {
+            SRV_LOGE("consume() | invalid consume response body");
+            return consumerController;
+        }
+
         bool paused_ = stats->paused();
         bool producerPaused_ = stats->producerPaused();
-        
+
         ConsumerScore score_;
-        score_.score = stats->score()->score();
-        score_.producerScore = stats->score()->producerScore();
-        for (const auto& item : *stats->score()->producerScores()) {
-            score_.producerScores.emplace_back(item);
+        auto scoreFbs = stats->score();
+        if (scoreFbs) {
+            score_.score = scoreFbs->score();
+            score_.producerScore = scoreFbs->producerScore();
+            if (scoreFbs->producerScores()) {
+                for (const auto& item : *scoreFbs->producerScores()) {
+                    score_.producerScores.emplace_back(item);
+                }
+            }
         }
-        
+        else {
+            SRV_LOGW("consume() | score is null in consume response");
+        }
+
         ConsumerLayers preferredLayers_;
         if (auto layers = stats->preferredLayers()) {
             preferredLayers_.spatialLayer = layers->spatialLayer();

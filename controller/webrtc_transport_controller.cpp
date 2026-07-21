@@ -150,38 +150,56 @@ namespace srv {
     void WebRtcTransportController::connect(const std::shared_ptr<ConnectParams>& params)
     {
         SRV_LOGD("connect()");
-        
+
         if (!params) {
-            SRV_LOGE("params is null");
+            SRV_LOGE("connect() | params is null");
             return;
         }
-            
+
         auto channel = _channel.lock();
         if (!channel) {
             return;
         }
-    
+
         flatbuffers::FlatBufferBuilder builder;
-        
+
         auto reqId = channel->genRequestId();
-        
+
         auto reqOffset = createConnectRequest(builder, params->dtlsParameters);
-        
+
         auto reqData = MessageBuilder::createRequest(builder,
                                                      reqId,
                                                      _internal.transportId,
                                                      FBS::Request::Method::WEBRTCTRANSPORT_CONNECT,
                                                      FBS::Request::Body::WebRtcTransport_ConnectRequest,
                                                      reqOffset);
-        
+
         auto respData = channel->request(reqId, reqData);
-        
-        auto message = FBS::Message::GetMessage(respData.data());
-        
+
+        if (respData.empty()) {
+            SRV_LOGE("connect() | empty response from worker (transportId=%s)",
+                     _internal.transportId.c_str());
+            return;
+        }
+
+        const auto* message = FBS::Message::GetMessage(respData.data());
+        if (!message) {
+            SRV_LOGE("connect() | failed to parse response message");
+            return;
+        }
+
         auto response = message->data_as_Response();
-        
+        if (!response) {
+            SRV_LOGE("connect() | response is not a Response message");
+            return;
+        }
+
         auto connectResponse = response->body_as_WebRtcTransport_ConnectResponse();
-        
+        if (!connectResponse) {
+            SRV_LOGE("connect() | invalid connect response body");
+            return;
+        }
+
         this->transportData()->dtlsParameters.role = dtlsRoleFromFbs(connectResponse->dtlsLocalRole());
     }
 

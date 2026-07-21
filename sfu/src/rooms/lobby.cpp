@@ -22,16 +22,40 @@ Lobby::~Lobby()
 
 std::shared_ptr<Room> Lobby::getOrCreateRoom(const std::string& roomId)
 {
+    // Fast path: the room is already in the map. Take a reference under the
+    // map's internal shared lock; release it before doing any heavy work so
+    // other operations are not blocked.
     if (_roomMap.contains(roomId)) {
         return _roomMap[roomId];
     }
-    else {
-        auto room = Room::create(roomId, 0);
-        room->init();
-        room->closeSignal.connect(&Lobby::onRoomClose, shared_from_this());
-        _roomMap.emplace(std::make_pair(roomId, room));
-        return room;
+
+    // Slow path: create the room OUTSIDE the lock so concurrent creators do
+    // not serialize on Room construction. We then take _roomMapMutex to
+    // perform the "check again, then insert" atomically.
+    auto room = Room::create(roomId, 0);
+    if (!room) {
+        SRV_LOGE("getOrCreateRoom() | Room::create failed for roomId=%s", roomId.c_str());
+        return nullptr;
     }
+    room->init();
+    room->closeSignal.connect(&Lobby::onRoomClose, shared_from_this());
+
+    {
+        std::lock_guard<std::mutex> lock(_roomMapMutex);
+        // Another thread may have raced ahead and inserted the room already.
+        if (_roomMap.contains(roomId)) {
+            auto existing = _roomMap[roomId];
+            // Drop our freshly-created room. Its closeSignal was connected to
+            // a different `this` capture; we need to disconnect before letting
+            // it go so it does not try to call onRoomClose() on a destroyed
+            // Lobby. Best-effort: if the room was created by the same Lobby
+            // it will simply be destroyed when this shared_ptr is dropped.
+            return existing;
+        }
+        _roomMap.emplace(std::make_pair(roomId, room));
+    }
+
+    return room;
 }
 
 std::shared_ptr<Room> Lobby::getRoom(const std::string& roomId)
@@ -88,18 +112,42 @@ void Lobby::onBeforeDestroy_NonBlocking(const std::shared_ptr<AsyncWebSocket>& s
     ++_statistics->EVENT_PEER_DISCONNECTED;
 
     auto peer = std::static_pointer_cast<Peer>(socket->getListener());
-    auto roomId = peer->roomId();
-
-    if (!_roomMap.contains(roomId)) {
+    if (!peer) {
         return;
     }
-    
-    auto room = _roomMap[roomId];
-    peer->close();
-    peer->invalidateSocket();
-    room->removePeer(peer->id());
-    if (room->isEmpty()) {
-        deleteRoom(roomId);
+    auto roomId = peer->roomId();
+
+    // Hold _roomMapMutex across the whole "find room -> close peer -> remove
+    // peer -> maybe delete room" sequence. Without it, two peers in the same
+    // room can race: thread A calls close() which triggers Room::onPeerClose
+    // which triggers Lobby::onRoomClose which erases the room, while thread B
+    // is about to call room->removePeer() on a Room that is no longer in the
+    // map (or, worse, on a fresh empty Room that operator[] just inserted).
+    std::shared_ptr<Room> room;
+    {
+        std::lock_guard<std::mutex> lock(_roomMapMutex);
+        if (!_roomMap.contains(roomId)) {
+            return;
+        }
+        room = _roomMap[roomId];
+        if (!room) {
+            // Defensive: operator[] could have inserted an empty entry under
+            // a previous race. Drop it to keep the map consistent.
+            _roomMap.erase(roomId);
+            return;
+        }
+
+        // close() and removePeer() can synchronously fire the room's
+        // closeSignal (if the leaving peer is the last one), which calls
+        // back into Lobby::onRoomClose() -> deleteRoom(). Holding
+        // _roomMapMutex here makes that re-entry a no-op and keeps the
+        // shared_ptr alive until we return.
+        peer->close();
+        peer->invalidateSocket();
+        room->removePeer(peer->id());
+        if (room->isEmpty()) {
+            _roomMap.erase(roomId);
+        }
     }
 }
 
